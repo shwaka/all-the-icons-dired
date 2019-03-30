@@ -54,11 +54,15 @@
 	  (when (and (dired-move-to-filename nil)
                      (not (seq-some (lambda (ovr) (overlay-get ovr 'all-the-icons-dired))
                                     (overlays-in (point) (point)))))
-            (let* ((icon (all-the-icons-dired--icon-at-pos (point)))
+            (let* ((icon-raw (all-the-icons-dired--icon-at-pos (point)))
+                   (icon (all-the-icons-dired--get-str-fixedwidth
+                          icon-raw
+                          all-the-icons-dired-icon-width))
                    (ovr (and icon (make-overlay (point) (point)))))
               (when (and icon ovr)
                 (overlay-put ovr 'all-the-icons-dired t)
-                (overlay-put ovr 'before-string (concat icon " ")))))
+                (overlay-put ovr 'before-string icon;; (concat icon " ")
+                             ))))
 	  (forward-line 1))))))
 
 (defun all-the-icons-dired--icon-at-pos (pos)
@@ -74,19 +78,54 @@
         (let ((matcher (all-the-icons-match-to-alist local-filename all-the-icons-dir-icon-alist))
               (remote-p (and (fboundp 'tramp-tramp-file-p)
                              (tramp-tramp-file-p filename))))
-	      (cond
-	       (remote-p
-	        (all-the-icons-octicon "file-directory" :v-adjust all-the-icons-dired-v-adjust :face 'all-the-icons-dired-dir-face))
-	       ((file-symlink-p filename)
-	        (all-the-icons-octicon "file-symlink-directory" :v-adjust all-the-icons-dired-v-adjust :face 'all-the-icons-dired-dir-face))
-	       ((all-the-icons-dir-is-submodule filename)
-	        (all-the-icons-octicon "file-submodule" :v-adjust all-the-icons-dired-v-adjust :face 'all-the-icons-dired-dir-face))
-	       ((file-exists-p (format "%s/.git" filename))
-	        (all-the-icons-octicon "repo" :v-adjust all-the-icons-dired-v-adjust :face 'all-the-icons-dired-dir-face))
-	       (t
-                (apply (car matcher) (list (cadr matcher) :face 'all-the-icons-dired-dir-face :v-adjust all-the-icons-dired-v-adjust))))))
+	  (cond
+	   (remote-p
+	    (all-the-icons-octicon "file-directory" :v-adjust all-the-icons-dired-v-adjust :face 'all-the-icons-dired-dir-face))
+	   ((file-symlink-p filename)
+	    (all-the-icons-octicon "file-symlink-directory" :v-adjust all-the-icons-dired-v-adjust :face 'all-the-icons-dired-dir-face))
+	   ((all-the-icons-dir-is-submodule filename)
+	    (all-the-icons-octicon "file-submodule" :v-adjust all-the-icons-dired-v-adjust :face 'all-the-icons-dired-dir-face))
+	   ((file-exists-p (format "%s/.git" filename))
+	    (all-the-icons-octicon "repo" :v-adjust all-the-icons-dired-v-adjust :face 'all-the-icons-dired-dir-face))
+	   (t
+            (apply (car matcher) (list (cadr matcher) :face 'all-the-icons-dired-dir-face :v-adjust all-the-icons-dired-v-adjust))))))
        (t
         (all-the-icons-icon-for-file local-filename :v-adjust all-the-icons-dired-v-adjust))))))
+
+;;; functions to show a string in fixed width
+(defvar all-the-icons-dired-icon-width
+  (floor (* 4.0 (default-font-width)))
+  "width of icon in pixel")
+
+(defun all-the-icons-dired--get-font-width (&optional pos obj)
+  "Return the width of the character at position POS in the object OBJ."
+  (let ((pos (or pos (point))))
+    (aref (aref (font-get-glyphs (font-at pos nil obj)
+                                 pos (1+ pos) obj)
+                0)
+          4)))
+
+(defun all-the-icons-dired--get-str-width (str)
+  "Calculate the width of STR in pixel."
+  (reduce '+ (mapcar (lambda (pos)
+                       (all-the-icons-dired--get-font-width pos str))
+                     (number-sequence 0 (1- (length str))))))
+
+(defun all-the-icons-dired--get-space (width)
+  "Get a space with width WIDTH (in pixel)."
+  (propertize " "
+              'display `(space . (:width (,width)))
+              'font-lock-ignore t))
+
+(defun all-the-icons-dired--get-str-fixedwidth (str width)
+  "Return STR with width WIDTH (in pixel)."
+  (let* ((str-width (all-the-icons-dired--get-str-width str))
+         (preceding-space-width (max 0 (/ (- width str-width)
+                                          2)))
+         (succeeding-space-width (- width str-width preceding-space-width)))
+    (concat (all-the-icons-dired--get-space preceding-space-width)
+            str
+            (all-the-icons-dired--get-space succeeding-space-width))))
 
 (defun all-the-icons-dired--reset (&optional _arg _noconfirm)
   "Functions used as advice when redisplaying buffer."
